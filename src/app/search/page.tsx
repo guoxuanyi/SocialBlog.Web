@@ -5,10 +5,11 @@ import Link from 'next/link';
 import Header from '@/components/Header';
 import BottomNav from '@/components/BottomNav';
 import PostCard, { PostCardSkeleton } from '@/components/PostCard';
-import { apiGet, displayAuthor, getPostId, type PaginatedResponse, type PostDto } from '@/lib/api';
+import { apiGet, displayAuthor, getPostId, toUserErrorMessage, type PaginatedResponse, type PostDto } from '@/shared/api';
 import { routes } from '@/lib/routes';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { Route } from 'next';
+import { useToast } from '@/components/ToastProvider';
 
 type SearchCacheEntry = {
   posts: PostDto[];
@@ -20,9 +21,17 @@ type SearchCacheEntry = {
 
 const searchCache = new Map<string, SearchCacheEntry>();
 
+function formatCardDate(value: string | null | undefined): string {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
 function SearchInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const toast = useToast();
   const q = (searchParams.get('q') ?? '').trim();
   const suggestions = ['Trending', 'City Guides', 'Solo Travel', 'Photography', 'Food', 'Tech'];
   const quick = [
@@ -45,6 +54,8 @@ function SearchInner() {
   const recRef = useRef<HTMLDivElement | null>(null);
   const recDragRef = useRef({ active: false, pointerId: 0, startX: 0, startLeft: 0 });
   const scrollYRef = useRef(cached?.scrollY ?? 0);
+  const [recPosts, setRecPosts] = useState<PostDto[]>([]);
+  const [recLoading, setRecLoading] = useState(true);
   const [input, setInput] = useState(q);
   const nextHref = useMemo(() => {
     const s = input.trim();
@@ -65,14 +76,35 @@ function SearchInner() {
       setHasMore(nextSkip + data.data.length < data.total);
       setPosts((prev) => (mode === 'append' ? [...prev, ...data.data] : data.data));
     } catch (e) {
-      setError(e instanceof Error ? e.message : '搜索失败');
+      const msg = toUserErrorMessage(e, '搜索失败');
+      setError(msg);
+      toast.push({ kind: 'error', message: msg });
       setHasMore(false);
       setPosts((prev) => (mode === 'append' ? prev : []));
     } finally {
       if (isInitial) setLoading(false);
       else setLoadingMore(false);
     }
-  }, [limit, q]);
+  }, [limit, q, toast]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function run() {
+      setRecLoading(true);
+      try {
+        const list = await apiGet<PostDto[]>(`/api/Posts/recommended?limit=10`, { cache: 'no-store' });
+        if (!cancelled) setRecPosts(Array.isArray(list) ? list : []);
+      } catch {
+        if (!cancelled) setRecPosts([]);
+      } finally {
+        if (!cancelled) setRecLoading(false);
+      }
+    }
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!q) {
@@ -162,7 +194,7 @@ function SearchInner() {
 
   return (
     <div className="min-h-screen bg-white flex flex-col font-sans page-in">
-      <Header title="Discover" mode="discover" showBack={true} showSearch={false} />
+      <Header title="Search" mode="detail" showBack={true} showSearch={false} />
       <main className="flex-1 max-w-5xl xl:max-w-6xl w-full mx-auto p-4 pb-20 md:pb-4">
         <form
           className="bg-white border border-gray-200 rounded-2xl px-4 py-3 flex items-center gap-3"
@@ -247,7 +279,9 @@ function SearchInner() {
                 if (!el) return;
                 if (e.pointerType === 'mouse' && e.button !== 0) return;
                 recDragRef.current = { active: true, pointerId: e.pointerId, startX: e.clientX, startLeft: el.scrollLeft };
-                el.setPointerCapture(e.pointerId);
+                try {
+                  el.setPointerCapture(e.pointerId);
+                } catch {}
               }}
               onPointerMove={(e) => {
                 const el = recRef.current;
@@ -261,7 +295,7 @@ function SearchInner() {
                 if (!el || d.pointerId !== e.pointerId) return;
                 recDragRef.current = { active: false, pointerId: 0, startX: 0, startLeft: 0 };
                 try {
-                  el.releasePointerCapture(e.pointerId);
+                  if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
                 } catch {}
               }}
               onPointerCancel={(e) => {
@@ -270,22 +304,71 @@ function SearchInner() {
                 if (!el || d.pointerId !== e.pointerId) return;
                 recDragRef.current = { active: false, pointerId: 0, startX: 0, startLeft: 0 };
                 try {
-                  el.releasePointerCapture(e.pointerId);
+                  if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
                 } catch {}
               }}
             >
               <div className="flex items-stretch gap-3 min-w-max pr-2">
-              {quick.map((r) => (
-                <Link
-                  key={r.title}
-                  href={`${routes.search()}?q=${encodeURIComponent(r.title)}`}
-                  className="w-80 shrink-0 min-h-[132px] rounded-2xl border border-gray-200 bg-white p-6 hover:bg-gray-50 transition-colors active:scale-[0.99]"
-                >
-                  <div className="text-lg font-extrabold tracking-tight text-gray-900">{r.title}</div>
-                  <div className="mt-1 text-sm text-gray-500">{r.subtitle}</div>
-                  <div className="mt-4 text-xs font-semibold text-gray-800 underline underline-offset-4">Search</div>
-                </Link>
-              ))}
+              {recLoading ? (
+                Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="w-80 shrink-0 min-h-[132px] rounded-2xl border border-gray-200 bg-white p-6">
+                    <div className="h-4 w-24 rounded skeleton" />
+                    <div className="mt-3 h-6 w-5/6 rounded skeleton fishbone" />
+                    <div className="mt-5 flex items-center gap-2">
+                      <div className="h-6 w-16 rounded-full skeleton" />
+                      <div className="h-6 w-20 rounded-full skeleton" />
+                    </div>
+                  </div>
+                ))
+              ) : recPosts.length > 0 ? (
+                recPosts.map((p) => {
+                  const postId = getPostId(p);
+                  if (!postId) return null;
+                  return (
+                    <Link
+                      key={postId}
+                      href={routes.posts.detail(postId)}
+                      className="w-80 shrink-0 min-h-[132px] rounded-2xl border border-gray-200 bg-white overflow-hidden hover:bg-gray-50 transition-colors active:scale-[0.99]"
+                    >
+                      {p.coverImageUrl ? (
+                        <div className="h-28 bg-gray-100 overflow-hidden">
+                          <img src={p.coverImageUrl} alt="" className="w-full h-full object-cover" />
+                        </div>
+                      ) : (
+                        <div className="h-28 bg-gradient-to-br from-teal-50 to-white border-b border-gray-100" />
+                      )}
+                      <div className="p-5">
+                        <div className="text-xs font-semibold text-gray-500">{formatCardDate(p.publishedAt ?? p.createdAt)}</div>
+                        <div className="mt-2 text-base font-extrabold tracking-tight text-gray-900 line-clamp-2">{p.title}</div>
+                        <div className="mt-3 flex items-center justify-between gap-3">
+                          <div className="flex flex-wrap gap-2">
+                            {(p.tags ?? []).slice(0, 2).map((t) => (
+                              <span key={t} className="px-3 py-1 rounded-full bg-teal-50 border border-teal-100 text-teal-800 text-[11px] font-semibold">
+                                {t}
+                              </span>
+                            ))}
+                          </div>
+                          <div className="text-[11px] text-gray-500 font-semibold">
+                            ❤️ {p.likeCount ?? 0} · 💬 {p.commentCount ?? 0}
+                          </div>
+                        </div>
+                      </div>
+                    </Link>
+                  );
+                })
+              ) : (
+                quick.map((r) => (
+                  <Link
+                    key={r.title}
+                    href={`${routes.search()}?q=${encodeURIComponent(r.title)}`}
+                    className="w-80 shrink-0 min-h-[132px] rounded-2xl border border-gray-200 bg-white p-6 hover:bg-gray-50 transition-colors active:scale-[0.99]"
+                  >
+                    <div className="text-lg font-extrabold tracking-tight text-gray-900">{r.title}</div>
+                    <div className="mt-1 text-sm text-gray-500">{r.subtitle}</div>
+                    <div className="mt-4 text-xs font-semibold text-gray-800 underline underline-offset-4">Search</div>
+                  </Link>
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -298,8 +381,6 @@ function SearchInner() {
                 <PostCardSkeleton key={i} />
               ))}
             </>
-          ) : error ? (
-            <div className="bg-red-50 border border-red-100 rounded-2xl p-6 text-sm text-red-700">{error}</div>
           ) : !q ? (
             <div className="bg-gray-50 border border-gray-100 rounded-2xl p-6 text-sm text-gray-500">
               输入关键词开始探索
@@ -316,11 +397,13 @@ function SearchInner() {
                   title={p.title}
                   excerpt={(p.content ?? '').slice(0, 120) + ((p.content ?? '').length > 120 ? '…' : '')}
                   author={displayAuthor(p.authorId)}
+                  authorId={p.authorId}
                   date={new Date(p.publishedAt ?? p.createdAt).toLocaleDateString()}
                   tags={p.tags ?? []}
                   likes={p.likeCount ?? 0}
                   comments={p.commentCount ?? 0}
                   coverImageUrl={p.coverImageUrl}
+                  status={p.status}
                   href={routes.posts.detail(postId)}
                   revealDelayMs={Math.min(240, i * 40)}
                 />
@@ -369,7 +452,7 @@ function SearchFallback() {
   const suggestions = ['AI', 'Next.js', 'Design', 'Product', 'Startup', 'React', 'Writing', 'Life'];
   return (
     <div className="min-h-screen bg-white flex flex-col font-sans">
-      <Header title="Discover" mode="discover" showBack={true} showSearch={false} />
+      <Header title="Search" mode="detail" showBack={true} showSearch={false} />
       <main className="flex-1 max-w-5xl xl:max-w-6xl w-full mx-auto p-4 pb-20 md:pb-4">
         <div className="bg-white border border-gray-200 rounded-2xl px-4 py-3 flex items-center gap-3">
           <div className="w-5 h-5 rounded skeleton" />

@@ -1,17 +1,19 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import type { Route } from 'next';
 import { routes } from '@/lib/routes';
 import { useAuth } from '@/components/AuthProvider';
+import { useT } from '@/features/preferences/PreferencesProvider';
 
 type HeaderProps = {
   title?: string;
   mode?: 'discover' | 'detail' | 'profile';
   showBack?: boolean;
   backHref?: Route;
+  onBack?: () => void;
   showSearch?: boolean;
   showPublish?: boolean;
   publishDisabled?: boolean;
@@ -19,217 +21,205 @@ type HeaderProps = {
 };
 
 export default function Header({
-  title = 'Discover',
+  title,
   mode = 'discover',
   showBack = false,
   backHref,
-  showSearch = true,
+  onBack,
+  showSearch = false,
   showPublish = false,
   publishDisabled = false,
   onPublish,
 }: HeaderProps) {
   const router = useRouter();
-  const [menuOpen, setMenuOpen] = useState(false);
+  const pathname = usePathname();
   const { state } = useAuth();
+  const t = useT();
 
-  const menuItems = useMemo(
-    () => [
-      { label: 'Home', href: routes.home() },
-      { label: 'Explore', href: routes.explore() },
-      { label: 'Inbox', href: routes.inbox() },
-      { label: 'Profile', href: state.status === 'authenticated' ? routes.profile(state.user.id) : routes.auth.login() },
-    ],
-    [state]
-  );
+  const avatarUrl = state.status === 'authenticated' ? (state.user.avatarUrl ?? '').trim() : '';
+  const showAvatarImage = Boolean(avatarUrl) && !avatarUrl.startsWith('data:video/');
 
-  const left = showBack ? (
-    backHref ? (
-      <Link
-        href={backHref}
-        className="inline-flex items-center justify-center w-10 h-10 -ml-2 text-gray-700 hover:text-orange-500 transition-colors"
-        aria-label="Back"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
-        </svg>
-      </Link>
-    ) : (
-      <button
-        type="button"
-        onClick={() => router.back()}
-        className="inline-flex items-center justify-center w-10 h-10 -ml-2 text-gray-700 hover:text-orange-500 transition-colors"
-        aria-label="Back"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
-        </svg>
-      </button>
-    )
-  ) : (
-    <button
-      type="button"
-      onClick={() => setMenuOpen((v) => !v)}
-      className="inline-flex items-center justify-center w-10 h-10 -ml-2 text-gray-700 hover:text-orange-500 transition-colors active:scale-95 md:hidden"
-      aria-label="Quick menu"
-    >
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M6 12h.008v.008H6V12Zm6 0h.008v.008H12V12Zm6 0h.008v.008H18V12Z" />
-      </svg>
-    </button>
-  );
-
-  const right = (
-    <div className="flex items-center gap-3">
-      {showPublish ? (
-        <button
-          type="button"
-          disabled={publishDisabled}
-          onClick={onPublish}
-          className="px-4 py-2 rounded-xl bg-orange-600 text-white text-sm font-semibold disabled:opacity-60 disabled:cursor-not-allowed hover:bg-orange-700 transition-colors active:scale-[0.98]"
-        >
-          Publish
-        </button>
-      ) : null}
-
-      {showSearch ? (
-        <Link
-          href={routes.explore()}
-          className="inline-flex items-center justify-center w-10 h-10 text-gray-700 hover:text-orange-500 transition-colors"
-          aria-label="Search"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
-            <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-          </svg>
-        </Link>
-      ) : null}
-
-      {state.status === 'authenticated' ? (
-        <Link
-          href={routes.profile(state.user.id)}
-          className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors overflow-hidden"
-          aria-label="Profile"
-        >
-          <span className="text-gray-700 font-semibold">{(state.user.displayName ?? state.user.username ?? 'U').charAt(0).toUpperCase()}</span>
-        </Link>
-      ) : null}
+  const brand = (
+    <div className="inline-flex items-center gap-2" role="img" aria-label="spectare">
+      <span className="w-9 h-9 rounded-xl bg-orange-500 text-white font-extrabold flex items-center justify-center shadow-sm">
+        S
+      </span>
+      <span className="text-sm font-extrabold tracking-tight text-gray-900">Spectare</span>
     </div>
   );
 
+  const menuItems = useMemo(() => {
+    const isHome = pathname === '/';
+    const isExplore = pathname === '/search' || pathname === '/explore';
+    const isInbox = pathname === '/activity' || pathname === '/inbox';
+
+    return [
+      {
+        key: 'home',
+        label: t('nav_home'),
+        href: routes.home(),
+        active: isHome,
+        icon: (
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+          </svg>
+        ),
+      },
+      {
+        key: 'explore',
+        label: t('nav_explore'),
+        href: routes.explore(),
+        active: isExplore,
+        icon: (
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+          </svg>
+        ),
+      },
+      {
+        key: 'inbox',
+        label: t('nav_inbox'),
+        href: routes.inbox(),
+        active: isInbox,
+        icon: (
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
+          </svg>
+        ),
+      },
+    ];
+  }, [pathname, t]);
+
+  const left = showBack
+    ? backHref
+      ? (
+          <Link
+            href={backHref}
+            className="inline-flex items-center justify-center w-10 h-10 -ml-2 text-gray-700 hover:text-orange-500 transition-colors"
+            aria-label={t('action_back')}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+            </svg>
+          </Link>
+        )
+      : (
+          <button
+            type="button"
+            onClick={() => (onBack ? onBack() : router.back())}
+            className="inline-flex items-center justify-center w-10 h-10 -ml-2 text-gray-700 hover:text-orange-500 transition-colors"
+            aria-label={t('action_back')}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+            </svg>
+          </button>
+        )
+    : null;
+
+  const profileHref = state.status === 'authenticated' ? routes.profile(state.user.id) : routes.auth.login();
+
   return (
     <header className="bg-white sticky top-0 z-50 border-b border-gray-100">
-      <div className="max-w-5xl xl:max-w-6xl mx-auto px-4 h-14 flex items-center gap-3 relative">
-        <div className="shrink-0 flex items-center gap-2">
+      <div className="max-w-5xl xl:max-w-6xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
+        <div className="min-w-0 flex items-center gap-2">
           {left}
-          <div className="hidden md:block">
-            {mode === 'discover' ? (
-              <Link href={routes.home()} className="text-orange-600 font-extrabold tracking-tight">
-                {title}
-              </Link>
-            ) : (
-              <div className="text-gray-900 font-semibold">{title}</div>
-            )}
-          </div>
-        </div>
-
-        <div className="md:hidden absolute left-1/2 -translate-x-1/2">
-          {mode === 'discover' ? (
-            <Link href={routes.home()} className="text-orange-600 font-extrabold tracking-tight">
-              {title}
-            </Link>
-          ) : (
-            <div className="text-gray-900 font-semibold">{title}</div>
-          )}
-        </div>
-
-        <nav className="hidden md:flex flex-1 items-center gap-2 overflow-x-auto hide-scrollbar">
-          {menuItems.map((item) => (
-            <Link
-              key={item.label}
-              href={item.href}
-              className="shrink-0 px-4 py-2 rounded-full border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50 active:scale-95 transition-transform"
-            >
-              {item.label}
-            </Link>
-          ))}
-          {state.status === 'authenticated' ? (
-            <Link
-              href={routes.settings.index()}
-              className="shrink-0 px-4 py-2 rounded-full border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50 active:scale-95 transition-transform"
-            >
-              Settings
-            </Link>
+          {brand}
+          {mode !== 'discover' ? (
+            <div className="text-gray-900 font-semibold max-w-[12rem] md:max-w-[16rem] truncate">{title ?? ''}</div>
           ) : null}
-        </nav>
+        </div>
 
         <div className="shrink-0 flex items-center gap-2">
-          {right}
-          {state.status !== 'authenticated' ? (
-            <div className="hidden md:flex items-center gap-2">
+          <nav className="hidden md:flex items-center gap-2">
+            {menuItems.map((item) => (
               <Link
-                href={routes.auth.login()}
-                className="px-4 py-2 rounded-xl bg-gray-900 text-white text-sm font-semibold hover:bg-gray-800 active:scale-[0.98] transition-transform"
+                key={item.key}
+                href={item.href}
+                title={item.label}
+                aria-label={item.label}
+                className={`group inline-flex items-center justify-center w-11 h-11 rounded-full border transition-all ${
+                  item.active ? 'bg-orange-50 border-orange-200 text-orange-700' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                }`}
               >
-                Login
+                <span className="sr-only">{item.label}</span>
+                <span className="transition-transform duration-200 group-hover:scale-110 group-active:scale-95">{item.icon}</span>
               </Link>
-              <Link
-                href={routes.auth.register()}
-                className="px-4 py-2 rounded-xl bg-orange-600 text-white text-sm font-semibold hover:bg-orange-700 active:scale-[0.98] transition-transform"
-              >
-                Register
-              </Link>
-            </div>
-          ) : null}
-        </div>
-      </div>
+            ))}
+          </nav>
 
-      <div className={`fixed inset-0 z-50 md:hidden ${menuOpen ? '' : 'pointer-events-none'}`}>
-        <button
-          type="button"
-          className={`absolute inset-0 bg-black/30 transition-opacity duration-200 ${menuOpen ? 'opacity-100' : 'opacity-0'}`}
-          aria-label="Close menu"
-          onClick={() => setMenuOpen(false)}
-        />
-        <div
-          className={`absolute left-0 right-0 top-14 transition-all duration-200 ${menuOpen ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2'}`}
-          aria-hidden={!menuOpen}
-        >
-          <div className="max-w-5xl xl:max-w-6xl mx-auto px-4">
-            <div className="bg-white border border-gray-200 rounded-2xl shadow-lg p-3 soft-pop">
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-sm text-gray-600">
-                  {state.status === 'authenticated'
-                    ? `Signed in as ${state.user.displayName ?? state.user.username}`
-                    : 'Not signed in'}
-                </div>
-                {state.status === 'authenticated' ? (
-                  <Link
-                    href={routes.settings.index()}
-                    onClick={() => setMenuOpen(false)}
-                    className="px-4 py-2 rounded-xl bg-gray-900 text-white text-sm font-semibold hover:bg-gray-800 active:scale-[0.98] transition-transform"
-                  >
-                    Settings
-                  </Link>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <Link
-                      href={routes.auth.login()}
-                      onClick={() => setMenuOpen(false)}
-                      className="px-4 py-2 rounded-xl bg-gray-900 text-white text-sm font-semibold hover:bg-gray-800 active:scale-[0.98] transition-transform"
-                    >
-                      Login
-                    </Link>
-                    <Link
-                      href={routes.auth.register()}
-                      onClick={() => setMenuOpen(false)}
-                      className="px-4 py-2 rounded-xl bg-orange-600 text-white text-sm font-semibold hover:bg-orange-700 active:scale-[0.98] transition-transform"
-                    >
-                      Register
-                    </Link>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+          <Link
+            href={state.status === 'authenticated' ? routes.settings.index() : routes.auth.login()}
+            title={t('settings')}
+            aria-label={t('settings')}
+            className={`group inline-flex items-center justify-center w-10 h-10 rounded-full border transition-all ${
+              pathname.startsWith('/settings')
+                ? 'bg-orange-50 border-orange-200 text-orange-700'
+                : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            <span className="transition-transform duration-200 group-hover:rotate-6 group-hover:scale-110 group-active:scale-95">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M10.343 3.94c.09-.542.56-.94 1.11-.94h1.094c.55 0 1.02.398 1.11.94l.149.894c.07.424.37.77.764.93.394.16.848.118 1.171-.11l.75-.53a1.125 1.125 0 0 1 1.41.14l.773.773c.39.39.44 1.002.14 1.41l-.53.75c-.228.323-.27.777-.11 1.17.16.395.506.695.93.765l.894.149c.542.09.94.56.94 1.11v1.094c0 .55-.398 1.02-.94 1.11l-.894.149c-.424.07-.77.37-.93.764-.16.394-.118.848.11 1.171l.53.75c.3.408.25 1.02-.14 1.41l-.773.773a1.125 1.125 0 0 1-1.41.14l-.75-.53c-.323-.228-.777-.27-1.17-.11-.395.16-.695.506-.765.93l-.149.894c-.09.542-.56.94-1.11.94h-1.094c-.55 0-1.02-.398-1.11-.94l-.149-.894a1.125 1.125 0 0 0-.765-.93c-.393-.16-.847-.118-1.17.11l-.75.53a1.125 1.125 0 0 1-1.41-.14l-.773-.773a1.125 1.125 0 0 1-.14-1.41l.53-.75c.228-.323.27-.777.11-1.17a1.125 1.125 0 0 0-.93-.765l-.894-.149a1.125 1.125 0 0 1-.94-1.11v-1.094c0-.55.398-1.02.94-1.11l.894-.149c.424-.07.77-.37.93-.764.16-.394.118-.848-.11-1.171l-.53-.75a1.125 1.125 0 0 1 .14-1.41l.773-.773a1.125 1.125 0 0 1 1.41-.14l.75.53c.323.228.777.27 1.17.11.395-.16.695-.506.765-.93l.149-.894Z"
+                />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+              </svg>
+            </span>
+          </Link>
+
+          {showSearch ? (
+            <Link
+              href={routes.explore()}
+              className="group inline-flex items-center justify-center w-10 h-10 rounded-full border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-all"
+              aria-label={t('action_search')}
+              title={t('action_search')}
+            >
+              <span className="transition-transform duration-200 group-hover:scale-110 group-active:scale-95">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                </svg>
+              </span>
+            </Link>
+          ) : null}
+
+          {showPublish ? (
+            <button
+              type="button"
+              disabled={publishDisabled}
+              onClick={onPublish}
+              className="group inline-flex items-center justify-center w-10 h-10 rounded-full bg-orange-600 text-white disabled:opacity-60 disabled:cursor-not-allowed hover:bg-orange-700 transition-colors active:scale-95"
+              aria-label={t('action_publish')}
+              title={t('action_publish')}
+            >
+              <span className="transition-transform duration-200 group-hover:scale-110">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-5 h-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.126A59.768 59.768 0 0 1 21.485 12 59.77 59.77 0 0 1 3.27 20.876L6 12Zm0 0h7.5" />
+                </svg>
+              </span>
+            </button>
+          ) : null}
+
+          <Link
+            href={profileHref}
+            className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors overflow-hidden"
+            aria-label={t('nav_profile')}
+            title={t('nav_profile')}
+          >
+            {state.status === 'authenticated' ? (
+              showAvatarImage ? (
+                <img src={avatarUrl} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-gray-700 font-semibold">{(state.user.displayName ?? state.user.username ?? 'U').charAt(0).toUpperCase()}</span>
+              )
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 text-gray-700">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+              </svg>
+            )}
+          </Link>
         </div>
       </div>
     </header>

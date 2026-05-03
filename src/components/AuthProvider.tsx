@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { clearAccessToken, getAccessToken, getMe, login as apiLogin, logout as apiLogout, setAccessToken, type UserProfileDto } from '@/lib/api';
+import { clearAccessToken, getAccessToken, getMe, login as apiLogin, logout as apiLogout, setAccessToken, type UserProfileDto } from '@/shared/api';
 
 type AuthState =
   | { status: 'loading'; user: null }
@@ -39,6 +39,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    const onRefresh = () => {
+      void refresh();
+    };
+    window.addEventListener('auth:refresh', onRefresh as EventListener);
+    return () => window.removeEventListener('auth:refresh', onRefresh as EventListener);
+  }, [refresh]);
+
   const login = useCallback(async (username: string, password: string) => {
     const token = await apiLogin(username, password);
     setAccessToken(token.accessToken);
@@ -64,4 +72,3 @@ export function useAuth(): AuthContextValue {
   if (!ctx) throw new Error('AuthProvider is missing');
   return ctx;
 }
-

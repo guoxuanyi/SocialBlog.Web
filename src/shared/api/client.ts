@@ -1,97 +1,4 @@
-type ResponseWrapper<T> = {
-  success: boolean;
-  message: string;
-  data: T;
-  code: number;
-  timestamp: number;
-};
-
-type InnerApiResponse<T> = {
-  successful: boolean;
-  message: string;
-  data: T | null;
-  code: number;
-  timestamp: number;
-};
-
-export type PaginatedResponse<T> = {
-  data: T[];
-  total: number;
-  skip: number;
-  limit: number;
-};
-
-export type PostDto = {
-  id: string;
-  authorId: string;
-  title: string;
-  content: string;
-  coverImageUrl?: string | null;
-  tags: string[];
-  status: string;
-  likeCount: number;
-  commentCount: number;
-  createdAt: string;
-  updatedAt: string;
-  publishedAt?: string | null;
-  isDeleted?: boolean;
-  deletedAt?: string | null;
-};
-
-export type CommentDto = {
-  id: string;
-  postId: string;
-  authorId: string;
-  content: string;
-  parentCommentId?: string | null;
-  createdAt: string;
-  updatedAt?: string | null;
-};
-
-export type TokenResponse = {
-  accessToken: string;
-  tokenType: string;
-  expiresIn: number;
-};
-
-export type UserProfileDto = {
-  id: string;
-  username: string;
-  email: string;
-  displayName?: string | null;
-  bio?: string | null;
-  avatarUrl?: string | null;
-  coverImageUrl?: string | null;
-  followersCount?: number;
-  followingCount?: number;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type PublicUserDto = {
-  id: string;
-  username: string;
-  displayName?: string | null;
-  bio?: string | null;
-  avatarUrl?: string | null;
-  coverImageUrl?: string | null;
-  followersCount?: number;
-  followingCount?: number;
-};
-
-export function isObjectId(value: string): boolean {
-  return /^[a-fA-F0-9]{24}$/.test(value);
-}
-
-export function resolveAuthorId(usernameOrId: string): string {
-  if (isObjectId(usernameOrId)) return usernameOrId;
-  return '';
-}
-
-export function displayAuthor(authorId: string): string {
-  if (!authorId) return 'Unknown';
-  return isObjectId(authorId) ? `${authorId.slice(0, 6)}…${authorId.slice(-4)}` : authorId;
-}
+import type { InnerApiResponse, ResponseWrapper } from '@/shared/api/types';
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? '').replace(/\/$/, '');
 const ACCESS_TOKEN_KEY = 'socialblog.access_token';
@@ -121,17 +28,6 @@ function isUsersMeEndpoint(url: string): boolean {
   if (idx === -1) return false;
   const after = idx + needle.length;
   return after === pathname.length || pathname[after] === '/';
-}
-
-export function getPostId(post: unknown): string {
-  if (!post || typeof post !== 'object') return '';
-  const p = post as { id?: unknown; Id?: unknown; _id?: unknown };
-  const v = p.id ?? p.Id ?? p._id;
-  if (typeof v !== 'string') return '';
-  const id = v.trim();
-  if (!id) return '';
-  if (!isObjectId(id)) return '';
-  return id;
 }
 
 export function getAccessToken(): string | null {
@@ -189,6 +85,14 @@ function withRequestContext(method: string, path: string, error: unknown): Error
   const err = new Error(message);
   (err as unknown as { cause?: unknown }).cause = { method, path, error };
   return err;
+}
+
+function isRetryableGetFailure(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error);
+  if (!msg) return false;
+  if (/^HTTP\s+\d{3}\b/i.test(msg)) return false;
+  if (/\b(unauthorized|forbidden|not found|bad request)\b/i.test(msg)) return false;
+  return /\b(failed to fetch|networkerror|load failed|fetch failed|timeout|timed out)\b/i.test(msg);
 }
 
 export function toUserErrorMessage(error: unknown, fallback = '请求失败，请稍后重试'): string {
@@ -253,6 +157,7 @@ function handleUnauthorizedIfNeeded(res: Response, url: string, headers: Headers
   if (typeof window === 'undefined') return;
   try {
     clearAccessToken();
+    inflightGets.clear();
   } catch {}
   try {
     const next = `${window.location.pathname}${window.location.search}${window.location.hash}`;
@@ -269,9 +174,18 @@ export async function apiGet<T>(path: string, init?: RequestInit): Promise<T> {
     const token = getAccessToken();
     if (token && !headers.has('authorization')) headers.set('authorization', `Bearer ${token}`);
 
-    const key = isUsersMeEndpoint(url) ? `${url}|${headers.get('authorization') ?? ''}` : url;
+    const key = `${url}|${headers.get('authorization') ?? ''}`;
     const cached = inflightGets.get(key);
-    if (cached) return (await cached) as T;
+    if (cached) {
+      try {
+        return (await cached) as T;
+      } catch (e) {
+        if (!isRetryableGetFailure(e)) throw e;
+        if (inflightGets.get(key) === cached) inflightGets.delete(key);
+      }
+    }
+    const afterRetry = inflightGets.get(key);
+    if (afterRetry) return (await afterRetry) as T;
 
     const task = (async () => {
       const res = await fetch(url, {
@@ -296,11 +210,7 @@ export async function apiGet<T>(path: string, init?: RequestInit): Promise<T> {
   }
 }
 
-export async function apiPostJson<TResponse, TBody>(
-  path: string,
-  body: TBody,
-  init?: RequestInit
-): Promise<TResponse> {
+export async function apiPostJson<TResponse, TBody>(path: string, body: TBody, init?: RequestInit): Promise<TResponse> {
   const url = resolveRequestUrl(path);
   try {
     const headers = mergeHeaders({ 'content-type': 'application/json' }, init?.headers);
@@ -362,11 +272,7 @@ export async function apiPost<TResponse>(path: string, init?: RequestInit): Prom
   }
 }
 
-export async function apiPutJson<TResponse, TBody>(
-  path: string,
-  body: TBody,
-  init?: RequestInit
-): Promise<TResponse> {
+export async function apiPutJson<TResponse, TBody>(path: string, body: TBody, init?: RequestInit): Promise<TResponse> {
   const url = resolveRequestUrl(path);
   try {
     const headers = mergeHeaders({ 'content-type': 'application/json' }, init?.headers);
@@ -405,75 +311,4 @@ export async function apiDelete<TResponse>(path: string, init?: RequestInit): Pr
     maybeToastApiError('DELETE', err);
     throw err;
   }
-}
-
-export async function login(username: string, password: string): Promise<TokenResponse> {
-  return apiPostJson<TokenResponse, { username: string; password: string }>('/api/auth/login', { username, password });
-}
-
-export async function logout(): Promise<void> {
-  await apiPost<object>('/api/auth/logout');
-}
-
-export async function registerUser(input: {
-  username: string;
-  email: string;
-  password: string;
-  displayName?: string;
-}): Promise<{ userId: string }> {
-  const res = await apiPostJson<{ userId: string }, typeof input>('/api/Users/register', input);
-  return res;
-}
-
-export async function getMe(): Promise<UserProfileDto> {
-  return apiGet<UserProfileDto>('/api/Users/me', { cache: 'no-store' });
-}
-
-export async function updateMe(input: {
-  displayName?: string | null;
-  bio?: string | null;
-  avatarUrl?: string | null;
-  coverImageUrl?: string | null;
-}): Promise<UserProfileDto> {
-  return apiPutJson<UserProfileDto, typeof input>('/api/Users/me', input);
-}
-
-export async function getUserProfile(userId: string): Promise<PublicUserDto> {
-  return apiGet<PublicUserDto>(`/api/Users/${encodeURIComponent(userId)}`, { cache: 'no-store' });
-}
-
-export async function getUserByUsername(username: string): Promise<PublicUserDto> {
-  return apiGet<PublicUserDto>(`/api/Users/by-username/${encodeURIComponent(username)}`, { cache: 'no-store' });
-}
-
-export async function followUser(userId: string): Promise<void> {
-  await apiPost<object>(`/api/Follows/${encodeURIComponent(userId)}`);
-}
-
-export async function unfollowUser(userId: string): Promise<void> {
-  await apiDelete<object>(`/api/Follows/${encodeURIComponent(userId)}`);
-}
-
-export async function getFollowStatus(userId: string): Promise<{ following: boolean }> {
-  return apiGet<{ following: boolean }>(`/api/Follows/status?userId=${encodeURIComponent(userId)}`, { cache: 'no-store' });
-}
-
-export async function getFollowers(userId: string, skip = 0, limit = 20): Promise<PaginatedResponse<PublicUserDto>> {
-  return apiGet<PaginatedResponse<PublicUserDto>>(`/api/Follows/${encodeURIComponent(userId)}/followers?skip=${skip}&limit=${limit}`, { cache: 'no-store' });
-}
-
-export async function getFollowing(userId: string, skip = 0, limit = 20): Promise<PaginatedResponse<PublicUserDto>> {
-  return apiGet<PaginatedResponse<PublicUserDto>>(`/api/Follows/${encodeURIComponent(userId)}/following?skip=${skip}&limit=${limit}`, { cache: 'no-store' });
-}
-
-export async function changeMyPassword(input: { oldPassword: string; newPassword: string }): Promise<void> {
-  await apiPostJson<object, typeof input>('/api/Users/me/change-password', input);
-}
-
-export async function getMyTrashPosts(skip = 0, limit = 20): Promise<PaginatedResponse<PostDto>> {
-  return apiGet<PaginatedResponse<PostDto>>(`/api/Posts/trash?skip=${skip}&limit=${limit}`, { cache: 'no-store' });
-}
-
-export async function restorePost(postId: string): Promise<{ restored: boolean }> {
-  return apiPost<{ restored: boolean }>(`/api/Posts/${encodeURIComponent(postId)}/restore`);
 }

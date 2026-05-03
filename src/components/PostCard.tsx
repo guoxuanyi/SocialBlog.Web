@@ -1,26 +1,42 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { Route } from 'next';
+import { routes } from '@/lib/routes';
 
 interface PostCardProps {
   title: string;
   excerpt: string;
   author: string;
+  authorId?: string;
   date: string;
   tags: string[];
   likes: number;
   comments: number;
   coverImageUrl?: string | null;
+  status?: string | null;
   href?: Route;
   revealDelayMs?: number;
 }
 
-export default function PostCard({ title, excerpt, author, date, tags, likes, comments, coverImageUrl, href, revealDelayMs }: PostCardProps) {
+function isPublished(status?: string | null): boolean {
+  if (!status) return true;
+  const s = status.trim().toLowerCase();
+  if (!s) return true;
+  return s === 'published' || s === 'publish';
+}
+
+function isVideoUrl(url: string): boolean {
+  return url.startsWith('data:video/') || /\.(mp4|webm|ogg|mov|m4v)(\?|#|$)/i.test(url);
+}
+
+export default function PostCard({ title, excerpt, author, authorId, date, tags, likes, comments, coverImageUrl, status, href, revealDelayMs }: PostCardProps) {
   const router = useRouter();
   const revealRef = useRef<HTMLDivElement | null>(null);
   const tiltAllowedRef = useRef(false);
+  const draft = !isPublished(status);
 
   const delayStyle = useMemo(() => {
     const d = typeof revealDelayMs === 'number' && Number.isFinite(revealDelayMs) ? Math.max(0, revealDelayMs) : 0;
@@ -73,7 +89,7 @@ export default function PostCard({ title, excerpt, author, date, tags, likes, co
   const card = (
     <div ref={revealRef} className="reveal" style={delayStyle} data-revealed="false">
       <article
-        className="tilt-surface bg-white p-5 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer"
+        className="tilt-surface relative bg-white p-5 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer"
         onClick={() => {
           if (!href) return;
           router.push(href);
@@ -107,18 +123,42 @@ export default function PostCard({ title, excerpt, author, date, tags, likes, co
       >
       {coverImageUrl ? (
         <div className="mb-4 overflow-hidden rounded-xl bg-gray-100">
-          <img src={coverImageUrl} alt="" className="w-full h-44 object-cover transition-transform duration-500 ease-out hover:scale-[1.03]" />
+          {isVideoUrl(coverImageUrl) ? (
+            <video src={coverImageUrl} className="w-full h-44 object-cover" muted playsInline controls />
+          ) : (
+            <img src={coverImageUrl} alt="" className="w-full h-44 object-cover transition-transform duration-500 ease-out hover:scale-[1.03]" />
+          )}
         </div>
       ) : null}
 
       <div className="flex items-center gap-3 mb-3">
-        <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-500 font-bold">
-          {author.charAt(0)}
-        </div>
-        <div>
-          <p className="text-sm font-semibold text-gray-900">{author}</p>
-          <p className="text-xs text-gray-500">{date}</p>
-        </div>
+        {authorId ? (
+          <Link
+            href={routes.profile(authorId)}
+            onClick={(e) => e.stopPropagation()}
+            className="group flex items-center gap-3"
+            aria-label={`View profile: ${author}`}
+            title={author}
+          >
+            <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-500 font-bold transition-transform duration-200 group-hover:scale-105 group-active:scale-95">
+              {author.charAt(0)}
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900 group-hover:text-orange-600 transition-colors">{author}</p>
+              <p className="text-xs text-gray-500">{date}</p>
+            </div>
+          </Link>
+        ) : (
+          <>
+            <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-500 font-bold">
+              {author.charAt(0)}
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900">{author}</p>
+              <p className="text-xs text-gray-500">{date}</p>
+            </div>
+          </>
+        )}
       </div>
 
       <h2 className="text-xl font-bold text-gray-900 mb-2">{title}</h2>
@@ -132,21 +172,28 @@ export default function PostCard({ title, excerpt, author, date, tags, likes, co
             </span>
           ))}
         </div>
-        <div className="flex gap-4 text-gray-500 text-sm">
-          <button
-            type="button"
-            onClick={(e) => e.stopPropagation()}
-            className="flex items-center gap-1 hover:text-orange-500 transition-colors active:scale-95"
-          >
-            <span>❤️</span> {likes}
-          </button>
-          <button
-            type="button"
-            onClick={(e) => e.stopPropagation()}
-            className="flex items-center gap-1 hover:text-teal-500 transition-colors active:scale-95"
-          >
-            <span>💬</span> {comments}
-          </button>
+        <div className="flex flex-col items-end gap-2">
+          {draft ? (
+            <span className="inline-flex items-center px-3 py-1 rounded-full bg-gray-900 text-white text-[11px] font-semibold tracking-wide">
+              DRAFT
+            </span>
+          ) : null}
+          <div className="flex gap-4 text-gray-500 text-sm">
+            <button
+              type="button"
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-1 hover:text-orange-500 transition-colors active:scale-95"
+            >
+              <span>❤️</span> {likes}
+            </button>
+            <button
+              type="button"
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-1 hover:text-teal-500 transition-colors active:scale-95"
+            >
+              <span>💬</span> {comments}
+            </button>
+          </div>
         </div>
       </div>
       </article>
