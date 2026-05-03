@@ -23,7 +23,7 @@ function buildHomeHref(tab: FeedTab, category: string): Route {
 
 export default function CategoryFilter({ tab, category }: CategoryFilterProps) {
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex items-center justify-center">
         <div className="bg-gray-50 border border-gray-100 rounded-full p-1 flex gap-1">
           <Link

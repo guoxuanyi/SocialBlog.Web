@@ -16,14 +16,27 @@ interface PostCardProps {
   likes: number;
   comments: number;
   coverImageUrl?: string | null;
+  status?: string | null;
   href?: Route;
   revealDelayMs?: number;
 }
 
-export default function PostCard({ title, excerpt, author, authorId, date, tags, likes, comments, coverImageUrl, href, revealDelayMs }: PostCardProps) {
+function isPublished(status?: string | null): boolean {
+  if (!status) return true;
+  const s = status.trim().toLowerCase();
+  if (!s) return true;
+  return s === 'published' || s === 'publish';
+}
+
+function isVideoUrl(url: string): boolean {
+  return url.startsWith('data:video/') || /\.(mp4|webm|ogg|mov|m4v)(\?|#|$)/i.test(url);
+}
+
+export default function PostCard({ title, excerpt, author, authorId, date, tags, likes, comments, coverImageUrl, status, href, revealDelayMs }: PostCardProps) {
   const router = useRouter();
   const revealRef = useRef<HTMLDivElement | null>(null);
   const tiltAllowedRef = useRef(false);
+  const draft = !isPublished(status);
 
   const delayStyle = useMemo(() => {
     const d = typeof revealDelayMs === 'number' && Number.isFinite(revealDelayMs) ? Math.max(0, revealDelayMs) : 0;
@@ -76,7 +89,7 @@ export default function PostCard({ title, excerpt, author, authorId, date, tags,
   const card = (
     <div ref={revealRef} className="reveal" style={delayStyle} data-revealed="false">
       <article
-        className="tilt-surface bg-white p-5 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer"
+        className="tilt-surface relative bg-white p-5 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer"
         onClick={() => {
           if (!href) return;
           router.push(href);
@@ -110,7 +123,11 @@ export default function PostCard({ title, excerpt, author, authorId, date, tags,
       >
       {coverImageUrl ? (
         <div className="mb-4 overflow-hidden rounded-xl bg-gray-100">
-          <img src={coverImageUrl} alt="" className="w-full h-44 object-cover transition-transform duration-500 ease-out hover:scale-[1.03]" />
+          {isVideoUrl(coverImageUrl) ? (
+            <video src={coverImageUrl} className="w-full h-44 object-cover" muted playsInline controls />
+          ) : (
+            <img src={coverImageUrl} alt="" className="w-full h-44 object-cover transition-transform duration-500 ease-out hover:scale-[1.03]" />
+          )}
         </div>
       ) : null}
 
@@ -155,21 +172,28 @@ export default function PostCard({ title, excerpt, author, authorId, date, tags,
             </span>
           ))}
         </div>
-        <div className="flex gap-4 text-gray-500 text-sm">
-          <button
-            type="button"
-            onClick={(e) => e.stopPropagation()}
-            className="flex items-center gap-1 hover:text-orange-500 transition-colors active:scale-95"
-          >
-            <span>❤️</span> {likes}
-          </button>
-          <button
-            type="button"
-            onClick={(e) => e.stopPropagation()}
-            className="flex items-center gap-1 hover:text-teal-500 transition-colors active:scale-95"
-          >
-            <span>💬</span> {comments}
-          </button>
+        <div className="flex flex-col items-end gap-2">
+          {draft ? (
+            <span className="inline-flex items-center px-3 py-1 rounded-full bg-gray-900 text-white text-[11px] font-semibold tracking-wide">
+              DRAFT
+            </span>
+          ) : null}
+          <div className="flex gap-4 text-gray-500 text-sm">
+            <button
+              type="button"
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-1 hover:text-orange-500 transition-colors active:scale-95"
+            >
+              <span>❤️</span> {likes}
+            </button>
+            <button
+              type="button"
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-1 hover:text-teal-500 transition-colors active:scale-95"
+            >
+              <span>💬</span> {comments}
+            </button>
+          </div>
         </div>
       </div>
       </article>

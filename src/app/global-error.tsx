@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import { toUserErrorMessage } from '@/lib/api';
+import { toUserErrorMessage } from '@/shared/api';
 import './globals.css';
 
 export default function GlobalError({

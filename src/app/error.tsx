@@ -4,7 +4,7 @@ import React, { useEffect } from 'react';
 import Link from 'next/link';
 import { routes } from '@/lib/routes';
 import { useToast } from '@/components/ToastProvider';
-import { toUserErrorMessage } from '@/lib/api';
+import { toUserErrorMessage } from '@/shared/api';
 
 export default function ErrorBoundary({
   error,
@@ -43,4 +43,3 @@ export default function ErrorBoundary({
     </div>
   );
 }
-

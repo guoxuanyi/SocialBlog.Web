@@ -1,8 +1,17 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --sb-bg: #ffffff;
+  --sb-surface: #ffffff;
+  --sb-surface-2: #f9fafb;
+  --sb-text: #111827;
+  --sb-muted: #6b7280;
+  --sb-border: #e5e7eb;
+  --sb-accent: #f97316;
+  --sb-accent-2: #14b8a6;
+
+  --background: var(--sb-bg);
+  --foreground: var(--sb-text);
 }
 
 @theme inline {
@@ -14,8 +23,14 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --sb-bg: #030712;
+    --sb-surface: #0b1220;
+    --sb-surface-2: #0f172a;
+    --sb-text: #f9fafb;
+    --sb-muted: #94a3b8;
+    --sb-border: rgba(148, 163, 184, 0.22);
+    --sb-accent: #f97316;
+    --sb-accent-2: #14b8a6;
   }
 }
 
@@ -23,10 +38,115 @@ html {
   scrollbar-gutter: stable;
 }
 
+html[data-theme='light'] {
+  --sb-bg: #ffffff;
+  --sb-surface: #ffffff;
+  --sb-surface-2: #f9fafb;
+  --sb-text: #111827;
+  --sb-muted: #6b7280;
+  --sb-border: #e5e7eb;
+  --sb-accent: #f97316;
+  --sb-accent-2: #14b8a6;
+  color-scheme: light;
+}
+
+html[data-theme='dark'] {
+  --sb-bg: #030712;
+  --sb-surface: #0b1220;
+  --sb-surface-2: #0f172a;
+  --sb-text: #f9fafb;
+  --sb-muted: #94a3b8;
+  --sb-border: rgba(148, 163, 184, 0.22);
+  --sb-accent: #fb923c;
+  --sb-accent-2: #2dd4bf;
+  color-scheme: dark;
+}
+
+html[data-theme='ocean'] {
+  --sb-bg: #061a20;
+  --sb-surface: #0a232b;
+  --sb-surface-2: #0d2a33;
+  --sb-text: #e6fbff;
+  --sb-muted: #8fd3dc;
+  --sb-border: rgba(143, 211, 220, 0.22);
+  --sb-accent: #22c55e;
+  --sb-accent-2: #38bdf8;
+  color-scheme: dark;
+}
+
+html[data-theme='sunset'] {
+  --sb-bg: #1a1020;
+  --sb-surface: #23112a;
+  --sb-surface-2: #2a1431;
+  --sb-text: #fff7ed;
+  --sb-muted: #fbcfe8;
+  --sb-border: rgba(251, 207, 232, 0.22);
+  --sb-accent: #f97316;
+  --sb-accent-2: #fb7185;
+  color-scheme: dark;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+html[data-theme] .bg-white {
+  background-color: var(--sb-surface) !important;
+}
+
+html[data-theme] .bg-gray-50 {
+  background-color: var(--sb-surface-2) !important;
+}
+
+html[data-theme] .bg-gray-100 {
+  background-color: color-mix(in srgb, var(--sb-surface-2) 82%, var(--sb-border)) !important;
+}
+
+html[data-theme] .text-gray-900,
+html[data-theme] .text-gray-800,
+html[data-theme] .text-gray-700 {
+  color: var(--sb-text) !important;
+}
+
+html[data-theme] .text-gray-600,
+html[data-theme] .text-gray-500,
+html[data-theme] .text-gray-400 {
+  color: var(--sb-muted) !important;
+}
+
+html[data-theme] .border-gray-200,
+html[data-theme] .border-gray-100 {
+  border-color: var(--sb-border) !important;
+}
+
+html[data-theme] .bg-orange-600,
+html[data-theme] .bg-orange-500 {
+  background-color: var(--sb-accent) !important;
+}
+
+html[data-theme] .text-orange-600,
+html[data-theme] .text-orange-500 {
+  color: var(--sb-accent) !important;
+}
+
+html[data-theme] .border-orange-100,
+html[data-theme] .border-orange-200 {
+  border-color: color-mix(in srgb, var(--sb-accent) 28%, var(--sb-border)) !important;
+}
+
+html[data-theme] .bg-orange-50 {
+  background-color: color-mix(in srgb, var(--sb-accent) 12%, var(--sb-surface)) !important;
+}
+
+html[data-theme] .bg-teal-50 {
+  background-color: color-mix(in srgb, var(--sb-accent-2) 12%, var(--sb-surface)) !important;
+}
+
+html[data-theme] .text-teal-700,
+html[data-theme] .text-teal-800 {
+  color: var(--sb-accent-2) !important;
 }
 
 @media (min-width: 768px) {

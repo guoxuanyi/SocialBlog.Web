@@ -6,12 +6,14 @@ import { usePathname, useRouter } from 'next/navigation';
 import type { Route } from 'next';
 import { routes } from '@/lib/routes';
 import { useAuth } from '@/components/AuthProvider';
+import { useT } from '@/features/preferences/PreferencesProvider';
 
 type HeaderProps = {
   title?: string;
   mode?: 'discover' | 'detail' | 'profile';
   showBack?: boolean;
   backHref?: Route;
+  onBack?: () => void;
   showSearch?: boolean;
   showPublish?: boolean;
   publishDisabled?: boolean;
@@ -19,10 +21,11 @@ type HeaderProps = {
 };
 
 export default function Header({
-  title = 'Discover',
+  title,
   mode = 'discover',
   showBack = false,
   backHref,
+  onBack,
   showSearch = false,
   showPublish = false,
   publishDisabled = false,
@@ -31,6 +34,10 @@ export default function Header({
   const router = useRouter();
   const pathname = usePathname();
   const { state } = useAuth();
+  const t = useT();
+
+  const avatarUrl = state.status === 'authenticated' ? (state.user.avatarUrl ?? '').trim() : '';
+  const showAvatarImage = Boolean(avatarUrl) && !avatarUrl.startsWith('data:video/');
 
   const brand = (
     <div className="inline-flex items-center gap-2" role="img" aria-label="spectare">
@@ -48,7 +55,8 @@ export default function Header({
 
     return [
       {
-        label: 'Home',
+        key: 'home',
+        label: t('nav_home'),
         href: routes.home(),
         active: isHome,
         icon: (
@@ -58,7 +66,8 @@ export default function Header({
         ),
       },
       {
-        label: 'Explore',
+        key: 'explore',
+        label: t('nav_explore'),
         href: routes.explore(),
         active: isExplore,
         icon: (
@@ -68,7 +77,8 @@ export default function Header({
         ),
       },
       {
-        label: 'Inbox',
+        key: 'inbox',
+        label: t('nav_inbox'),
         href: routes.inbox(),
         active: isInbox,
         icon: (
@@ -78,7 +88,7 @@ export default function Header({
         ),
       },
     ];
-  }, [pathname]);
+  }, [pathname, t]);
 
   const left = showBack
     ? backHref
@@ -86,7 +96,7 @@ export default function Header({
           <Link
             href={backHref}
             className="inline-flex items-center justify-center w-10 h-10 -ml-2 text-gray-700 hover:text-orange-500 transition-colors"
-            aria-label="Back"
+            aria-label={t('action_back')}
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
@@ -96,9 +106,9 @@ export default function Header({
       : (
           <button
             type="button"
-            onClick={() => router.back()}
+            onClick={() => (onBack ? onBack() : router.back())}
             className="inline-flex items-center justify-center w-10 h-10 -ml-2 text-gray-700 hover:text-orange-500 transition-colors"
-            aria-label="Back"
+            aria-label={t('action_back')}
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
@@ -116,7 +126,7 @@ export default function Header({
           {left}
           {brand}
           {mode !== 'discover' ? (
-            <div className="text-gray-900 font-semibold max-w-[12rem] md:max-w-[16rem] truncate">{title}</div>
+            <div className="text-gray-900 font-semibold max-w-[12rem] md:max-w-[16rem] truncate">{title ?? ''}</div>
           ) : null}
         </div>
 
@@ -124,7 +134,7 @@ export default function Header({
           <nav className="hidden md:flex items-center gap-2">
             {menuItems.map((item) => (
               <Link
-                key={item.label}
+                key={item.key}
                 href={item.href}
                 title={item.label}
                 aria-label={item.label}
@@ -140,8 +150,8 @@ export default function Header({
 
           <Link
             href={state.status === 'authenticated' ? routes.settings.index() : routes.auth.login()}
-            title="Settings"
-            aria-label="Settings"
+            title={t('settings')}
+            aria-label={t('settings')}
             className={`group inline-flex items-center justify-center w-10 h-10 rounded-full border transition-all ${
               pathname.startsWith('/settings')
                 ? 'bg-orange-50 border-orange-200 text-orange-700'
@@ -164,8 +174,8 @@ export default function Header({
             <Link
               href={routes.explore()}
               className="group inline-flex items-center justify-center w-10 h-10 rounded-full border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-all"
-              aria-label="Search"
-              title="Search"
+              aria-label={t('action_search')}
+              title={t('action_search')}
             >
               <span className="transition-transform duration-200 group-hover:scale-110 group-active:scale-95">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
@@ -180,20 +190,30 @@ export default function Header({
               type="button"
               disabled={publishDisabled}
               onClick={onPublish}
-              className="px-4 py-2 rounded-xl bg-orange-600 text-white text-sm font-semibold disabled:opacity-60 disabled:cursor-not-allowed hover:bg-orange-700 transition-colors"
+              className="group inline-flex items-center justify-center w-10 h-10 rounded-full bg-orange-600 text-white disabled:opacity-60 disabled:cursor-not-allowed hover:bg-orange-700 transition-colors active:scale-95"
+              aria-label={t('action_publish')}
+              title={t('action_publish')}
             >
-              Publish
+              <span className="transition-transform duration-200 group-hover:scale-110">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-5 h-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.126A59.768 59.768 0 0 1 21.485 12 59.77 59.77 0 0 1 3.27 20.876L6 12Zm0 0h7.5" />
+                </svg>
+              </span>
             </button>
           ) : null}
 
           <Link
             href={profileHref}
             className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors overflow-hidden"
-            aria-label="Profile"
-            title="Profile"
+            aria-label={t('nav_profile')}
+            title={t('nav_profile')}
           >
             {state.status === 'authenticated' ? (
-              <span className="text-gray-700 font-semibold">{(state.user.displayName ?? state.user.username ?? 'U').charAt(0).toUpperCase()}</span>
+              showAvatarImage ? (
+                <img src={avatarUrl} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-gray-700 font-semibold">{(state.user.displayName ?? state.user.username ?? 'U').charAt(0).toUpperCase()}</span>
+              )
             ) : (
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 text-gray-700">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />

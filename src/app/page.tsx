@@ -6,10 +6,11 @@ import PostCard, { PostCardSkeleton } from '@/components/PostCard';
 import Header from '@/components/Header';
 import CategoryFilter from '@/components/CategoryFilter';
 import BottomNav from '@/components/BottomNav';
-import { apiGet, displayAuthor, getPostId, toUserErrorMessage, type PaginatedResponse, type PostDto } from '@/lib/api';
+import { apiGet, displayAuthor, getPostId, toUserErrorMessage, type PaginatedResponse, type PostDto } from '@/shared/api';
 import { routes } from '@/lib/routes';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
+import { useToast } from '@/components/ToastProvider';
 
 type FeedTab = 'forYou' | 'following';
 
@@ -19,6 +20,13 @@ function buildHomeHref(tab: FeedTab, category: string) {
   if (category && category !== 'Trending') params.set('category', category);
   const qs = params.toString();
   return (qs ? `/?${qs}` : '/') as import('next').Route;
+}
+
+function formatCardDate(value: string | null | undefined): string {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 const recommended = [
@@ -41,6 +49,7 @@ const homeCache = new Map<string, HomeCacheEntry>();
 
 function HomeInner() {
   const { state } = useAuth();
+  const toast = useToast();
   const searchParams = useSearchParams();
   const tab = searchParams.get('tab') === 'following' ? 'following' : 'forYou';
   const category = (searchParams.get('category') ?? 'Trending').trim() || 'Trending';
@@ -58,8 +67,10 @@ function HomeInner() {
   const limit = 20;
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const recRef = useRef<HTMLDivElement | null>(null);
-  const recDragRef = useRef({ active: false, pointerId: 0, startX: 0, startLeft: 0 });
+  const recDragRef = useRef({ active: false, moved: false, pointerId: 0, startX: 0, startLeft: 0 });
   const scrollYRef = useRef(cached?.scrollY ?? 0);
+  const [recPosts, setRecPosts] = useState<PostDto[]>([]);
+  const [recLoading, setRecLoading] = useState(true);
 
   const fetchPage = useCallback(async (nextSkip: number, mode: 'replace' | 'append') => {
     const isInitial = mode === 'replace';
@@ -80,15 +91,56 @@ function HomeInner() {
       setHasMore(nextSkip + data.data.length < data.total);
       setPosts((prev) => (mode === 'append' ? [...prev, ...data.data] : data.data));
     } catch (e) {
-      setError(toUserErrorMessage(e, '加载失败'));
+      const msg = toUserErrorMessage(e, '加载失败');
+      setError(msg);
+      toast.push({ kind: 'error', message: msg });
       setHasMore(false);
     } finally {
       if (isInitial) setLoading(false);
       else setLoadingMore(false);
     }
-  }, [limit, state.status, tab, userId]);
+  }, [limit, state.status, tab, toast, userId]);
 
   useEffect(() => {
+    let cancelled = false;
+    async function run() {
+      setRecLoading(true);
+      try {
+        const list = await apiGet<PostDto[]>(`/api/Posts/recommended?limit=10`, { cache: 'no-store' });
+        if (!cancelled) setRecPosts(Array.isArray(list) ? list : []);
+      } catch {
+        if (!cancelled) setRecPosts([]);
+      } finally {
+        if (!cancelled) setRecLoading(false);
+      }
+    }
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let forceRefresh = false;
+    try {
+      forceRefresh = window.sessionStorage.getItem('sb:home:needs_refresh') === '1';
+      if (forceRefresh) window.sessionStorage.removeItem('sb:home:needs_refresh');
+    } catch {}
+
+    if (forceRefresh) {
+      homeCache.clear();
+      setPosts([]);
+      setSkip(0);
+      setHasMore(true);
+      setError(null);
+      setLoading(false);
+      setLoadingMore(false);
+      setShowScrollHint(true);
+      scrollYRef.current = 0;
+      void fetchPage(0, 'replace');
+      return;
+    }
+
     const hit = homeCache.get(cacheKey);
     if (hit) {
       setPosts(hit.posts);
@@ -112,6 +164,21 @@ function HomeInner() {
   useEffect(() => {
     const ensureLoaded = () => {
       if (typeof document === 'undefined') return;
+      try {
+        const forceRefresh = window.sessionStorage.getItem('sb:home:needs_refresh') === '1';
+        if (forceRefresh) {
+          window.sessionStorage.removeItem('sb:home:needs_refresh');
+          homeCache.clear();
+          setPosts([]);
+          setSkip(0);
+          setHasMore(true);
+          setError(null);
+          setShowScrollHint(true);
+          scrollYRef.current = 0;
+          void fetchPage(0, 'replace');
+          return;
+        }
+      } catch {}
       if (error) return;
       if (posts.length > 0) return;
       if (loadingMore) return;
@@ -195,7 +262,7 @@ function HomeInner() {
     <div className="min-h-screen bg-white flex flex-col font-sans page-in">
       <Header title="Discover" mode="discover" showBack={false} showSearch={false} />
       
-      <main className="flex-1 max-w-5xl xl:max-w-6xl w-full mx-auto p-4 pb-20 md:pb-4">
+      <main className="flex-1 max-w-5xl xl:max-w-6xl w-full mx-auto p-4 pb-24 md:pb-6">
         <CategoryFilter tab={tab} category={category} />
 
         <div className="mt-4">
@@ -232,54 +299,120 @@ function HomeInner() {
                 const el = recRef.current;
                 if (!el) return;
                 if (e.pointerType === 'mouse' && e.button !== 0) return;
-                recDragRef.current = { active: true, pointerId: e.pointerId, startX: e.clientX, startLeft: el.scrollLeft };
-                el.setPointerCapture(e.pointerId);
+                recDragRef.current = { active: false, moved: false, pointerId: e.pointerId, startX: e.clientX, startLeft: el.scrollLeft };
               }}
               onPointerMove={(e) => {
                 const el = recRef.current;
                 const d = recDragRef.current;
-                if (!el || !d.active || d.pointerId !== e.pointerId) return;
-                el.scrollLeft = d.startLeft - (e.clientX - d.startX);
+                if (!el || d.pointerId !== e.pointerId) return;
+                const dx = e.clientX - d.startX;
+                if (!d.active) {
+                  if (Math.abs(dx) < 7) return;
+                  d.active = true;
+                  d.moved = true;
+                  try {
+                    el.setPointerCapture(e.pointerId);
+                  } catch {}
+                }
+                if (!d.active) return;
+                el.scrollLeft = d.startLeft - dx;
               }}
               onPointerUp={(e) => {
                 const el = recRef.current;
                 const d = recDragRef.current;
                 if (!el || d.pointerId !== e.pointerId) return;
-                recDragRef.current = { active: false, pointerId: 0, startX: 0, startLeft: 0 };
+                recDragRef.current = { active: false, moved: d.moved, pointerId: 0, startX: 0, startLeft: 0 };
                 try {
-                  el.releasePointerCapture(e.pointerId);
+                  if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
                 } catch {}
               }}
               onPointerCancel={(e) => {
                 const el = recRef.current;
                 const d = recDragRef.current;
                 if (!el || d.pointerId !== e.pointerId) return;
-                recDragRef.current = { active: false, pointerId: 0, startX: 0, startLeft: 0 };
+                recDragRef.current = { active: false, moved: d.moved, pointerId: 0, startX: 0, startLeft: 0 };
                 try {
-                  el.releasePointerCapture(e.pointerId);
+                  if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
                 } catch {}
+              }}
+              onClickCapture={(e) => {
+                if (!recDragRef.current.moved) return;
+                recDragRef.current.moved = false;
+                e.preventDefault();
+                e.stopPropagation();
               }}
             >
               <div className="flex items-stretch gap-3 min-w-max pr-2">
-              {recommended.map((r) => (
-                <Link
-                  key={r.title}
-                  href={buildHomeHref(tab, r.title)}
-                  className={`w-80 shrink-0 min-h-[132px] rounded-2xl border bg-gradient-to-br ${r.tone} p-6 transition-transform active:scale-[0.99]`}
-                >
-                  <div className="text-lg font-extrabold tracking-tight">{r.title}</div>
-                  <div className="mt-1 text-sm opacity-80">{r.subtitle}</div>
-                  <div className="mt-4 text-xs font-semibold underline underline-offset-4 opacity-90">Explore</div>
-                </Link>
-              ))}
-              <Link
-                href={buildHomeHref(tab, 'Trending')}
-                className="w-80 shrink-0 min-h-[132px] rounded-2xl border border-gray-200 bg-white p-6 hover:bg-gray-50 transition-colors active:scale-[0.99]"
-              >
-                <div className="text-lg font-extrabold tracking-tight text-gray-900">Trending</div>
-                <div className="mt-1 text-sm text-gray-500">大家都在看</div>
-                <div className="mt-4 text-xs font-semibold text-gray-800 underline underline-offset-4">Explore</div>
-              </Link>
+              {recLoading ? (
+                Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="w-80 shrink-0 min-h-[132px] rounded-2xl border border-gray-200 bg-white p-6">
+                    <div className="h-4 w-24 rounded skeleton" />
+                    <div className="mt-3 h-6 w-5/6 rounded skeleton fishbone" />
+                    <div className="mt-5 flex items-center gap-2">
+                      <div className="h-6 w-16 rounded-full skeleton" />
+                      <div className="h-6 w-20 rounded-full skeleton" />
+                    </div>
+                  </div>
+                ))
+              ) : recPosts.length > 0 ? (
+                recPosts.map((p) => {
+                  const postId = getPostId(p);
+                  if (!postId) return null;
+                  return (
+                    <Link
+                      key={postId}
+                      href={routes.posts.detail(postId)}
+                      className="w-80 shrink-0 min-h-[132px] rounded-2xl border border-gray-200 bg-white overflow-hidden hover:bg-gray-50 transition-colors active:scale-[0.99]"
+                    >
+                      {p.coverImageUrl ? (
+                        <div className="h-28 bg-gray-100 overflow-hidden">
+                          <img src={p.coverImageUrl} alt="" className="w-full h-full object-cover" />
+                        </div>
+                      ) : (
+                        <div className="h-28 bg-gradient-to-br from-orange-50 to-white border-b border-gray-100" />
+                      )}
+                      <div className="p-5">
+                        <div className="text-xs font-semibold text-gray-500">{formatCardDate(p.publishedAt ?? p.createdAt)}</div>
+                        <div className="mt-2 text-base font-extrabold tracking-tight text-gray-900 line-clamp-2">{p.title}</div>
+                        <div className="mt-3 flex items-center justify-between gap-3">
+                          <div className="flex flex-wrap gap-2">
+                            {(p.tags ?? []).slice(0, 2).map((t) => (
+                              <span key={t} className="px-3 py-1 rounded-full bg-orange-50 border border-orange-100 text-orange-700 text-[11px] font-semibold">
+                                {t}
+                              </span>
+                            ))}
+                          </div>
+                          <div className="text-[11px] text-gray-500 font-semibold">
+                            ❤️ {p.likeCount ?? 0} · 💬 {p.commentCount ?? 0}
+                          </div>
+                        </div>
+                      </div>
+                    </Link>
+                  );
+                })
+              ) : (
+                <>
+                  {recommended.map((r) => (
+                    <Link
+                      key={r.title}
+                      href={buildHomeHref(tab, r.title)}
+                      className={`w-80 shrink-0 min-h-[132px] rounded-2xl border bg-gradient-to-br ${r.tone} p-6 transition-transform active:scale-[0.99]`}
+                    >
+                      <div className="text-lg font-extrabold tracking-tight">{r.title}</div>
+                      <div className="mt-1 text-sm opacity-80">{r.subtitle}</div>
+                      <div className="mt-4 text-xs font-semibold underline underline-offset-4 opacity-90">Explore</div>
+                    </Link>
+                  ))}
+                  <Link
+                    href={buildHomeHref(tab, 'Trending')}
+                    className="w-80 shrink-0 min-h-[132px] rounded-2xl border border-gray-200 bg-white p-6 hover:bg-gray-50 transition-colors active:scale-[0.99]"
+                  >
+                    <div className="text-lg font-extrabold tracking-tight text-gray-900">Trending</div>
+                    <div className="mt-1 text-sm text-gray-500">大家都在看</div>
+                    <div className="mt-4 text-xs font-semibold text-gray-800 underline underline-offset-4">Explore</div>
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -301,10 +434,6 @@ function HomeInner() {
                 <PostCardSkeleton key={i} />
               ))}
             </>
-          ) : error ? (
-            <div className="bg-red-50 border border-red-100 rounded-2xl p-6 text-sm text-red-700">
-              {error}
-            </div>
           ) : filteredPosts.length === 0 ? (
             <div className="bg-gray-50 border border-gray-100 rounded-2xl p-6 text-sm text-gray-500">
               暂无内容
@@ -325,6 +454,7 @@ function HomeInner() {
                   likes={p.likeCount ?? 0}
                   comments={p.commentCount ?? 0}
                   coverImageUrl={p.coverImageUrl}
+                  status={p.status}
                   href={routes.posts.detail(postId)}
                   revealDelayMs={Math.min(240, i * 40)}
                 />
@@ -375,7 +505,7 @@ function HomeFallback() {
   return (
     <div className="min-h-screen bg-white flex flex-col font-sans">
       <Header title="Discover" mode="discover" showBack={false} showSearch={false} />
-      <main className="flex-1 max-w-5xl xl:max-w-6xl w-full mx-auto p-4 pb-20 md:pb-4">
+      <main className="flex-1 max-w-5xl xl:max-w-6xl w-full mx-auto p-4 pb-24 md:pb-6">
         <div className="mt-6 space-y-4">
           {Array.from({ length: 6 }).map((_, i) => (
             <PostCardSkeleton key={i} />

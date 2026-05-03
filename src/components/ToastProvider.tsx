@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 type ToastKind = 'info' | 'success' | 'error';
 
@@ -32,6 +32,7 @@ function kindClasses(kind: ToastKind): string {
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const timersRef = useRef(new Map<string, number>());
+  const lastToastRef = useRef<{ key: string; at: number } | null>(null);
 
   const remove = useCallback((id: string) => {
     const t = timersRef.current.get(id);
@@ -48,6 +49,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   const push = useCallback(
     ({ kind = 'info', message, durationMs = 4000 }: ToastInput) => {
+      const now = Date.now();
+      const key = `${kind}:${message}`;
+      const last = lastToastRef.current;
+      if (last && last.key === key && now - last.at < 1200) return;
+      lastToastRef.current = { key, at: now };
       const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
       const toast: Toast = { id, kind, message };
       setToasts((prev) => [...prev, toast].slice(-3));
@@ -56,6 +62,17 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     },
     [remove]
   );
+
+  useEffect(() => {
+    const onToast = (evt: Event) => {
+      const e = evt as CustomEvent<ToastInput>;
+      const msg = (e.detail?.message ?? '').trim();
+      if (!msg) return;
+      push({ kind: e.detail?.kind, message: msg, durationMs: e.detail?.durationMs });
+    };
+    window.addEventListener('app:toast', onToast as EventListener);
+    return () => window.removeEventListener('app:toast', onToast as EventListener);
+  }, [push]);
 
   const value = useMemo<ToastContextValue>(() => ({ push, clear }), [push, clear]);
 
@@ -94,4 +111,3 @@ export function useToast(): ToastContextValue {
   if (!ctx) throw new Error('ToastProvider is missing');
   return ctx;
 }
-
