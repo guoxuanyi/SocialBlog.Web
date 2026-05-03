@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Header from '@/components/Header';
-import { registerUser } from '@/lib/api';
+import { registerUser, toUserErrorMessage } from '@/lib/api';
 import { routes } from '@/lib/routes';
 
 export default function RegisterPage() {
@@ -38,7 +38,7 @@ export default function RegisterPage() {
       setSuccess('注册成功，请登录');
       router.replace(routes.auth.login());
     } catch (err) {
-      setError(err instanceof Error ? err.message : '注册失败');
+      setError(toUserErrorMessage(err, '注册失败'));
     } finally {
       setSubmitting(false);
     }

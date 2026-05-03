@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Header from '@/components/Header';
 import BottomNav from '@/components/BottomNav';
 import PostCard, { PostCardSkeleton } from '@/components/PostCard';
-import { apiGet, displayAuthor, getPostId, type PaginatedResponse, type PostDto } from '@/lib/api';
+import { apiGet, displayAuthor, getPostId, toUserErrorMessage, type PaginatedResponse, type PostDto } from '@/lib/api';
 import { routes } from '@/lib/routes';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { Route } from 'next';
@@ -65,7 +65,7 @@ function SearchInner() {
       setHasMore(nextSkip + data.data.length < data.total);
       setPosts((prev) => (mode === 'append' ? [...prev, ...data.data] : data.data));
     } catch (e) {
-      setError(e instanceof Error ? e.message : '搜索失败');
+      setError(toUserErrorMessage(e, '搜索失败'));
       setHasMore(false);
       setPosts((prev) => (mode === 'append' ? prev : []));
     } finally {
@@ -162,7 +162,7 @@ function SearchInner() {
 
   return (
     <div className="min-h-screen bg-white flex flex-col font-sans page-in">
-      <Header title="Discover" mode="discover" showBack={true} showSearch={false} />
+      <Header title="Search" mode="detail" showBack={true} showSearch={false} />
       <main className="flex-1 max-w-5xl xl:max-w-6xl w-full mx-auto p-4 pb-20 md:pb-4">
         <form
           className="bg-white border border-gray-200 rounded-2xl px-4 py-3 flex items-center gap-3"
@@ -316,6 +316,7 @@ function SearchInner() {
                   title={p.title}
                   excerpt={(p.content ?? '').slice(0, 120) + ((p.content ?? '').length > 120 ? '…' : '')}
                   author={displayAuthor(p.authorId)}
+                  authorId={p.authorId}
                   date={new Date(p.publishedAt ?? p.createdAt).toLocaleDateString()}
                   tags={p.tags ?? []}
                   likes={p.likeCount ?? 0}
@@ -369,7 +370,7 @@ function SearchFallback() {
   const suggestions = ['AI', 'Next.js', 'Design', 'Product', 'Startup', 'React', 'Writing', 'Life'];
   return (
     <div className="min-h-screen bg-white flex flex-col font-sans">
-      <Header title="Discover" mode="discover" showBack={true} showSearch={false} />
+      <Header title="Search" mode="detail" showBack={true} showSearch={false} />
       <main className="flex-1 max-w-5xl xl:max-w-6xl w-full mx-auto p-4 pb-20 md:pb-4">
         <div className="bg-white border border-gray-200 rounded-2xl px-4 py-3 flex items-center gap-3">
           <div className="w-5 h-5 rounded skeleton" />

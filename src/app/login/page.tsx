@@ -7,6 +7,7 @@ import type { Route } from 'next';
 import Header from '@/components/Header';
 import { useAuth } from '@/components/AuthProvider';
 import { routes } from '@/lib/routes';
+import { toUserErrorMessage } from '@/lib/api';
 
 function LoginInner() {
   const { login, state } = useAuth();
@@ -33,7 +34,7 @@ function LoginInner() {
       const target: Route = next && next.startsWith('/') ? (next as unknown as Route) : routes.home();
       router.replace(target);
     } catch (e) {
-      setError(e instanceof Error ? e.message : '登录失败');
+      setError(toUserErrorMessage(e, '登录失败'));
     } finally {
       setSubmitting(false);
     }

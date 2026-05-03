@@ -6,7 +6,7 @@ import Header from '@/components/Header';
 import BottomNav from '@/components/BottomNav';
 import { useAuth } from '@/components/AuthProvider';
 import { routes } from '@/lib/routes';
-import { updateMe } from '@/lib/api';
+import { toUserErrorMessage, updateMe } from '@/lib/api';
 
 export default function EditProfilePage() {
   const router = useRouter();
@@ -54,7 +54,7 @@ export default function EditProfilePage() {
       setSaved(true);
       router.replace(routes.profile(state.user.id));
     } catch (e) {
-      setError(e instanceof Error ? e.message : '保存失败');
+      setError(toUserErrorMessage(e, '保存失败'));
     } finally {
       setSaving(false);
     }

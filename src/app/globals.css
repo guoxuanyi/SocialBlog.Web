@@ -196,6 +196,50 @@ body {
   animation: bounceSoft 1.2s ease-in-out infinite;
 }
 
+a,
+button,
+summary,
+[role="button"],
+input[type="submit"] {
+  cursor: pointer;
+}
+
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+a,
+button,
+[role="button"] {
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    transform 160ms ease,
+    filter 160ms ease;
+}
+
+a:active,
+button:active:not(:disabled),
+[role="button"]:active {
+  transform: scale(0.98);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  a:hover,
+  button:hover:not(:disabled),
+  [role="button"]:hover {
+    transform: translateY(-1px) scale(1.03);
+    filter: drop-shadow(0 14px 24px rgba(17, 24, 39, 0.12));
+  }
+}
+
+a:focus-visible,
+button:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid rgb(249, 115, 22);
+  outline-offset: 2px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .page-in,
   .soft-pop,

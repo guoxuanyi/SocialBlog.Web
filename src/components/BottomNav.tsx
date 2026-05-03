@@ -28,6 +28,36 @@ export default function BottomNav() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+  function scrollToTopElastic() {
+    if (typeof window === 'undefined') return;
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false;
+    if (reducedMotion) {
+      window.scrollTo({ top: 0, behavior: 'auto' });
+      return;
+    }
+
+    const startY = window.scrollY;
+    const endY = 0;
+    const delta = endY - startY;
+    const durationMs = 620;
+    const start = performance.now();
+
+    const easeOutBack = (t: number) => {
+      const c1 = 1.70158;
+      const c3 = c1 + 1;
+      return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+    };
+
+    const step = (now: number) => {
+      const p = Math.min(1, Math.max(0, (now - start) / durationMs));
+      const y = startY + delta * easeOutBack(p);
+      window.scrollTo(0, y);
+      if (p < 1) requestAnimationFrame(step);
+    };
+
+    requestAnimationFrame(step);
+  }
+
   return (
     <>
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-6 py-3 flex justify-between items-center z-50">
@@ -80,58 +110,74 @@ export default function BottomNav() {
         </Link>
       </div>
 
-      <button
-        type="button"
-        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-        className={`fixed right-4 bottom-20 md:right-6 md:bottom-40 z-50 w-14 h-14 rounded-full bg-gray-900 text-white shadow-lg transition-all ${
-          showTop ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 pointer-events-none'
-        } active:scale-95 flex items-center justify-center`}
-        aria-label="Back to top"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-6 h-6">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M6 10.5 12 4.5l6 6M12 4.5v15" />
-        </svg>
-      </button>
+      <div className="fixed right-4 bottom-20 md:right-6 md:bottom-24 z-50">
+        <button
+          type="button"
+          onClick={() => {
+            if (typeof window === 'undefined') return;
+            const sp = new URLSearchParams(window.location.search);
+            const authed = state.status === 'authenticated';
+            const authKey = authed ? state.user.id : '';
 
-      <button
-        type="button"
-        onClick={() => {
-          if (typeof window === 'undefined') return;
-          const sp = new URLSearchParams(window.location.search);
-          const authed = state.status === 'authenticated';
-          const authKey = authed ? state.user.id : '';
+            if (pathname === '/') {
+              const tab = sp.get('tab') === 'following' ? 'following' : 'forYou';
+              const category = (sp.get('category') ?? 'Trending').trim() || 'Trending';
+              const key = `${tab}|${category}|${state.status}|${authKey}`;
+              window.dispatchEvent(new CustomEvent('app:refresh-feed', { detail: { key } }));
+              return;
+            }
 
-          if (pathname === '/') {
-            const tab = sp.get('tab') === 'following' ? 'following' : 'forYou';
-            const category = (sp.get('category') ?? 'Trending').trim() || 'Trending';
-            const key = `${tab}|${category}|${state.status}|${authKey}`;
-            window.dispatchEvent(new CustomEvent('app:refresh-feed', { detail: { key } }));
-            return;
-          }
+            if (pathname === '/search' || pathname === '/explore') {
+              const q = (sp.get('q') ?? '').trim();
+              window.dispatchEvent(new CustomEvent('app:refresh-search', { detail: { key: q || '*' } }));
+              return;
+            }
 
-          if (pathname === '/search' || pathname === '/explore') {
-            const q = (sp.get('q') ?? '').trim();
-            window.dispatchEvent(new CustomEvent('app:refresh-search', { detail: { key: q || '*' } }));
-            return;
-          }
+            if (pathname.startsWith('/profile/')) {
+              const tab = (sp.get('tab') ?? 'Published').trim();
+              const username = decodeURIComponent(pathname.slice('/profile/'.length));
+              const key = `${username}|${tab}|${state.status}|${authKey}`;
+              window.dispatchEvent(new CustomEvent('app:refresh-profile', { detail: { key } }));
+              return;
+            }
 
-          if (pathname.startsWith('/profile/')) {
-            const tab = (sp.get('tab') ?? 'Published').trim();
-            const username = decodeURIComponent(pathname.slice('/profile/'.length));
-            const key = `${username}|${tab}|${state.status}|${authKey}`;
-            window.dispatchEvent(new CustomEvent('app:refresh-profile', { detail: { key } }));
-            return;
-          }
+            window.location.reload();
+          }}
+          className="group w-14 h-14 rounded-full bg-white text-gray-800 border border-gray-200 shadow-lg transition-transform active:scale-95 flex items-center justify-center"
+          aria-label="Refresh list"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={2.5}
+            stroke="currentColor"
+            className="w-6 h-6 transition-transform duration-200 group-hover:rotate-45 group-active:rotate-0"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992V4.356M7.977 14.652H2.985v4.992m0 0h4.992m-4.992 0 3.181-3.182a8.25 8.25 0 0 0 13.803-3.7M21.015 4.356 17.834 7.538A8.25 8.25 0 0 0 4.031 11.24" />
+          </svg>
+        </button>
 
-          window.location.reload();
-        }}
-        className="fixed right-4 bottom-32 md:right-6 md:bottom-24 z-50 w-14 h-14 rounded-full bg-white text-gray-800 border border-gray-200 shadow-lg transition-transform active:scale-95 flex items-center justify-center"
-        aria-label="Refresh list"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-6 h-6">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992V4.356M7.977 14.652H2.985v4.992m0 0h4.992m-4.992 0 3.181-3.182a8.25 8.25 0 0 0 13.803-3.7M21.015 4.356 17.834 7.538A8.25 8.25 0 0 0 4.031 11.24" />
-        </svg>
-      </button>
+        <button
+          type="button"
+          onClick={scrollToTopElastic}
+          className={`group absolute right-0 bottom-[4.25rem] w-14 h-14 rounded-full bg-gray-900 text-white shadow-lg transition-all ${
+            showTop ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 pointer-events-none'
+          } active:scale-95 flex items-center justify-center`}
+          aria-label="Back to top"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={2.5}
+            stroke="currentColor"
+            className="w-6 h-6 transition-transform duration-200 group-hover:-translate-y-0.5 group-active:translate-y-0"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 10.5 12 4.5l6 6M12 4.5v15" />
+          </svg>
+        </button>
+      </div>
 
       <Link
         href={routes.create()}

@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import Header from '@/components/Header';
 import BottomNav from '@/components/BottomNav';
-import { apiDelete, apiGet, apiPostJson, displayAuthor, isObjectId, type CommentDto, type PaginatedResponse, type PostDto } from '@/lib/api';
+import { apiDelete, apiGet, apiPostJson, displayAuthor, isObjectId, toUserErrorMessage, type CommentDto, type PaginatedResponse, type PostDto } from '@/lib/api';
 import { useAuth } from '@/components/AuthProvider';
 import { routes } from '@/lib/routes';
 import { useParams, useRouter } from 'next/navigation';
@@ -69,7 +70,7 @@ export default function PostDetail() {
         setComments(c.data);
         setLiked(Boolean(like.liked));
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : '加载失败');
+        if (!cancelled) setError(toUserErrorMessage(e, '加载失败'));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -124,7 +125,7 @@ export default function PostDetail() {
       const p = await apiGet<PostDto>(`/api/Posts/${encodeURIComponent(id)}`, { cache: 'no-store' });
       setPost(p);
     } catch (e) {
-      setError(e instanceof Error ? e.message : '操作失败');
+      setError(toUserErrorMessage(e, '操作失败'));
     } finally {
       setTogglingLike(false);
     }
@@ -152,7 +153,7 @@ export default function PostDetail() {
       const p = await apiGet<PostDto>(`/api/Posts/${encodeURIComponent(id)}`, { cache: 'no-store' });
       setPost(p);
     } catch (e) {
-      setError(e instanceof Error ? e.message : '评论失败');
+      setError(toUserErrorMessage(e, '评论失败'));
     } finally {
       setSubmittingComment(false);
     }
@@ -270,15 +271,20 @@ export default function PostDetail() {
               <h1 className="mt-3 text-3xl font-extrabold tracking-tight text-gray-900">{post.title}</h1>
 
               <div className="mt-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 font-bold">
+                <Link
+                  href={routes.profile(post.authorId)}
+                  className="group flex items-center gap-3"
+                  aria-label={`View profile: ${displayAuthor(post.authorId)}`}
+                  title={displayAuthor(post.authorId)}
+                >
+                  <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 font-bold transition-transform duration-200 group-hover:scale-105 group-active:scale-95">
                     {displayAuthor(post.authorId).charAt(0).toUpperCase()}
                   </div>
                   <div>
-                    <div className="text-sm font-semibold text-gray-900">{displayAuthor(post.authorId)}</div>
+                    <div className="text-sm font-semibold text-gray-900 group-hover:text-orange-600 transition-colors">{displayAuthor(post.authorId)}</div>
                     <div className="text-xs text-gray-500">{publishedDate}</div>
                   </div>
-                </div>
+                </Link>
                 <button
                   type="button"
                   className="px-4 py-2 rounded-xl bg-teal-50 text-teal-700 text-sm font-semibold border border-teal-100 active:scale-[0.98] transition-transform"
@@ -345,15 +351,20 @@ export default function PostDetail() {
                       data-revealed={animateIn ? 'true' : 'false'}
                       style={{ transitionDelay: `${Math.min(240, idx * 40)}ms` }}
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-teal-50 flex items-center justify-center text-teal-700 font-semibold">
+                      <Link
+                        href={routes.profile(c.authorId)}
+                        className="group flex items-center gap-3"
+                        aria-label={`View profile: ${displayAuthor(c.authorId)}`}
+                        title={displayAuthor(c.authorId)}
+                      >
+                        <div className="w-9 h-9 rounded-full bg-teal-50 flex items-center justify-center text-teal-700 font-semibold transition-transform duration-200 group-hover:scale-105 group-active:scale-95">
                           {displayAuthor(c.authorId).charAt(0).toUpperCase()}
                         </div>
                         <div>
-                          <div className="text-sm font-semibold text-gray-900">{displayAuthor(c.authorId)}</div>
+                          <div className="text-sm font-semibold text-gray-900 group-hover:text-teal-700 transition-colors">{displayAuthor(c.authorId)}</div>
                           <div className="text-xs text-gray-500">{new Date(c.createdAt).toLocaleString()}</div>
                         </div>
-                      </div>
+                      </Link>
                       <div className="mt-2 text-sm text-gray-700 leading-6">{c.content}</div>
                     </div>
                   ))}

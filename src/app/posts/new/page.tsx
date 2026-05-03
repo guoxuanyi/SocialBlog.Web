@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import Header from '@/components/Header';
 import BottomNav from '@/components/BottomNav';
-import { apiPost, apiPostJson } from '@/lib/api';
+import { apiPost, apiPostJson, toUserErrorMessage } from '@/lib/api';
 import { routes } from '@/lib/routes';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
@@ -113,7 +113,7 @@ export default function NewPostPage() {
       await apiPost<{ id: string }>(`/api/Posts/${postId}/publish`);
       router.push(routes.posts.detail(postId));
     } catch (e) {
-      setError(e instanceof Error ? e.message : '发布失败');
+      setError(toUserErrorMessage(e, '发布失败'));
     } finally {
       setSubmitting(false);
     }

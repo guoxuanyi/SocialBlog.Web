@@ -1,13 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Header from '@/components/Header';
 import BottomNav from '@/components/BottomNav';
 import PostCard, { PostCardSkeleton } from '@/components/PostCard';
 import { routes } from '@/lib/routes';
 import type { Route } from 'next';
-import { apiGet, displayAuthor, getPostId, resolveAuthorId, type PaginatedResponse, type PostDto } from '@/lib/api';
+import { apiGet, displayAuthor, getPostId, resolveAuthorId, toUserErrorMessage, type PaginatedResponse, type PostDto } from '@/lib/api';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
 
@@ -29,10 +29,9 @@ function buildTabHref(username: string, tab: Tab): Route {
   return `${routes.profile(username)}?${params.toString()}` as Route;
 }
 
-function UserProfileInner({ params }: { params: { username: string } }) {
+function UserProfileInner({ username }: { username: string }) {
   const { state } = useAuth();
   const searchParams = useSearchParams();
-  const username = params.username;
   const authorId = useMemo(() => resolveAuthorId(username), [username]);
   const isOwn = state.status === 'authenticated' && authorId && state.user.id === authorId;
   const displayName = isOwn
@@ -74,7 +73,7 @@ function UserProfileInner({ params }: { params: { username: string } }) {
       setHasMore(nextSkip + data.data.length < data.total);
       setPosts((prev) => (mode === 'append' ? [...prev, ...data.data] : data.data));
     } catch (e) {
-      setError(e instanceof Error ? e.message : '加载失败');
+      setError(toUserErrorMessage(e, '加载失败'));
       setHasMore(false);
       setPosts((prev) => (mode === 'append' ? prev : []));
     } finally {
@@ -255,6 +254,7 @@ function UserProfileInner({ params }: { params: { username: string } }) {
                       title={p.title}
                       excerpt={(p.content ?? '').slice(0, 120) + ((p.content ?? '').length > 120 ? '…' : '')}
                       author={displayAuthor(p.authorId)}
+                      authorId={p.authorId}
                       date={new Date(p.publishedAt ?? p.createdAt).toLocaleDateString()}
                       tags={p.tags ?? []}
                       likes={p.likeCount ?? 0}
@@ -307,10 +307,11 @@ function UserProfileInner({ params }: { params: { username: string } }) {
   );
 }
 
-function ProfileFallback({ username }: { username: string }) {
+function ProfileFallback({ username }: { username?: string }) {
+  const display = username ? `@${username}` : '@…';
   return (
     <div className="min-h-screen bg-white flex flex-col font-sans">
-      <Header title={`@${username}`} mode="profile" showBack={true} showSearch={false} />
+      <Header title={display} mode="profile" showBack={true} showSearch={false} />
       <main className="flex-1 max-w-5xl xl:max-w-6xl w-full mx-auto pb-20 md:pb-4">
         <div className="relative">
           <div className="h-36 bg-gradient-to-r from-gray-100 to-gray-200" />
@@ -340,10 +341,15 @@ function ProfileFallback({ username }: { username: string }) {
   );
 }
 
-export default function UserProfile({ params }: { params: { username: string } }) {
+export default function UserProfile({ params }: { params: Promise<{ username: string }> }) {
   return (
-    <Suspense fallback={<ProfileFallback username={params.username} />}>
-      <UserProfileInner params={params} />
+    <Suspense fallback={<ProfileFallback />}>
+      <UserProfileResolved params={params} />
     </Suspense>
   );
+}
+
+function UserProfileResolved({ params }: { params: Promise<{ username: string }> }) {
+  const { username } = use(params);
+  return <UserProfileInner username={username} />;
 }

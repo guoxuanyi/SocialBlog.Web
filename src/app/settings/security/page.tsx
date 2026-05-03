@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Header from '@/components/Header';
 import BottomNav from '@/components/BottomNav';
 import { useAuth } from '@/components/AuthProvider';
-import { changeMyPassword } from '@/lib/api';
+import { changeMyPassword, toUserErrorMessage } from '@/lib/api';
 import { routes } from '@/lib/routes';
 
 export default function SecurityPage() {
@@ -39,7 +39,7 @@ export default function SecurityPage() {
       setOldPassword('');
       setNewPassword('');
     } catch (e) {
-      setError(e instanceof Error ? e.message : '修改失败');
+      setError(toUserErrorMessage(e, '修改失败'));
     } finally {
       setSubmitting(false);
     }

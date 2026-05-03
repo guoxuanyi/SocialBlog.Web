@@ -170,7 +170,33 @@ async function parseApiResponse<T>(res: Response): Promise<T> {
 
 function withRequestContext(method: string, path: string, error: unknown): Error {
   const message = error instanceof Error ? error.message : String(error);
-  return new Error(`${method} ${path} -> ${message}`);
+  const err = new Error(message);
+  (err as unknown as { cause?: unknown }).cause = { method, path, error };
+  return err;
+}
+
+export function toUserErrorMessage(error: unknown, fallback = '请求失败，请稍后重试'): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  const withoutPrefix = raw.replace(/^(GET|POST|PUT|DELETE)\s+\S+\s+->\s+/i, '').trim();
+  if (!withoutPrefix) return fallback;
+
+  const http = withoutPrefix.match(/^HTTP\s+(\d{3})\b/i);
+  if (http) {
+    const code = Number(http[1]);
+    if (code === 401) return '登录已过期，请重新登录';
+    if (code === 403) return '没有权限执行此操作';
+    if (code === 404) return '资源不存在';
+    if (code >= 500) return '服务开小差了，请稍后重试';
+    return fallback;
+  }
+
+  if (/failed to fetch|networkerror|load failed|fetch failed/i.test(withoutPrefix)) {
+    return '网络异常，请检查网络后重试';
+  }
+
+  if (/(https?:\/\/|\/api\/)/i.test(withoutPrefix)) return fallback;
+  if (withoutPrefix.length > 180) return fallback;
+  return withoutPrefix;
 }
 
 export async function apiGet<T>(path: string, init?: RequestInit): Promise<T> {

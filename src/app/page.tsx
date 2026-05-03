@@ -6,7 +6,7 @@ import PostCard, { PostCardSkeleton } from '@/components/PostCard';
 import Header from '@/components/Header';
 import CategoryFilter from '@/components/CategoryFilter';
 import BottomNav from '@/components/BottomNav';
-import { apiGet, displayAuthor, getPostId, type PaginatedResponse, type PostDto } from '@/lib/api';
+import { apiGet, displayAuthor, getPostId, toUserErrorMessage, type PaginatedResponse, type PostDto } from '@/lib/api';
 import { routes } from '@/lib/routes';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
@@ -80,7 +80,7 @@ function HomeInner() {
       setHasMore(nextSkip + data.data.length < data.total);
       setPosts((prev) => (mode === 'append' ? [...prev, ...data.data] : data.data));
     } catch (e) {
-      setError(e instanceof Error ? e.message : '加载失败');
+      setError(toUserErrorMessage(e, '加载失败'));
       setHasMore(false);
     } finally {
       if (isInitial) setLoading(false);
@@ -319,6 +319,7 @@ function HomeInner() {
                   title={p.title}
                   excerpt={(p.content ?? '').slice(0, 120) + ((p.content ?? '').length > 120 ? '…' : '')}
                   author={displayAuthor(p.authorId)}
+                  authorId={p.authorId}
                   date={new Date(p.publishedAt ?? p.createdAt).toLocaleDateString()}
                   tags={p.tags ?? []}
                   likes={p.likeCount ?? 0}

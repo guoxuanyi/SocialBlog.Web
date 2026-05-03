@@ -1,13 +1,16 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { Route } from 'next';
+import { routes } from '@/lib/routes';
 
 interface PostCardProps {
   title: string;
   excerpt: string;
   author: string;
+  authorId?: string;
   date: string;
   tags: string[];
   likes: number;
@@ -17,7 +20,7 @@ interface PostCardProps {
   revealDelayMs?: number;
 }
 
-export default function PostCard({ title, excerpt, author, date, tags, likes, comments, coverImageUrl, href, revealDelayMs }: PostCardProps) {
+export default function PostCard({ title, excerpt, author, authorId, date, tags, likes, comments, coverImageUrl, href, revealDelayMs }: PostCardProps) {
   const router = useRouter();
   const revealRef = useRef<HTMLDivElement | null>(null);
   const tiltAllowedRef = useRef(false);
@@ -112,13 +115,33 @@ export default function PostCard({ title, excerpt, author, date, tags, likes, co
       ) : null}
 
       <div className="flex items-center gap-3 mb-3">
-        <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-500 font-bold">
-          {author.charAt(0)}
-        </div>
-        <div>
-          <p className="text-sm font-semibold text-gray-900">{author}</p>
-          <p className="text-xs text-gray-500">{date}</p>
-        </div>
+        {authorId ? (
+          <Link
+            href={routes.profile(authorId)}
+            onClick={(e) => e.stopPropagation()}
+            className="group flex items-center gap-3"
+            aria-label={`View profile: ${author}`}
+            title={author}
+          >
+            <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-500 font-bold transition-transform duration-200 group-hover:scale-105 group-active:scale-95">
+              {author.charAt(0)}
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900 group-hover:text-orange-600 transition-colors">{author}</p>
+              <p className="text-xs text-gray-500">{date}</p>
+            </div>
+          </Link>
+        ) : (
+          <>
+            <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-500 font-bold">
+              {author.charAt(0)}
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900">{author}</p>
+              <p className="text-xs text-gray-500">{date}</p>
+            </div>
+          </>
+        )}
       </div>
 
       <h2 className="text-xl font-bold text-gray-900 mb-2">{title}</h2>
