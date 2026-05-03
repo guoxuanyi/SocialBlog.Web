@@ -87,6 +87,14 @@ function withRequestContext(method: string, path: string, error: unknown): Error
   return err;
 }
 
+function isRetryableGetFailure(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error);
+  if (!msg) return false;
+  if (/^HTTP\s+\d{3}\b/i.test(msg)) return false;
+  if (/\b(unauthorized|forbidden|not found|bad request)\b/i.test(msg)) return false;
+  return /\b(failed to fetch|networkerror|load failed|fetch failed|timeout|timed out)\b/i.test(msg);
+}
+
 export function toUserErrorMessage(error: unknown, fallback = '请求失败，请稍后重试'): string {
   const raw = error instanceof Error ? error.message : String(error);
   const withoutPrefix = raw.replace(/^(GET|POST|PUT|DELETE)\s+\S+\s+->\s+/i, '').trim();
@@ -149,6 +157,7 @@ function handleUnauthorizedIfNeeded(res: Response, url: string, headers: Headers
   if (typeof window === 'undefined') return;
   try {
     clearAccessToken();
+    inflightGets.clear();
   } catch {}
   try {
     const next = `${window.location.pathname}${window.location.search}${window.location.hash}`;
@@ -165,9 +174,18 @@ export async function apiGet<T>(path: string, init?: RequestInit): Promise<T> {
     const token = getAccessToken();
     if (token && !headers.has('authorization')) headers.set('authorization', `Bearer ${token}`);
 
-    const key = isUsersMeEndpoint(url) ? `${url}|${headers.get('authorization') ?? ''}` : url;
+    const key = `${url}|${headers.get('authorization') ?? ''}`;
     const cached = inflightGets.get(key);
-    if (cached) return (await cached) as T;
+    if (cached) {
+      try {
+        return (await cached) as T;
+      } catch (e) {
+        if (!isRetryableGetFailure(e)) throw e;
+        if (inflightGets.get(key) === cached) inflightGets.delete(key);
+      }
+    }
+    const afterRetry = inflightGets.get(key);
+    if (afterRetry) return (await afterRetry) as T;
 
     const task = (async () => {
       const res = await fetch(url, {
